@@ -20,9 +20,10 @@ proc listFiles(dir: string, ignored: seq[string]) =
       continue
     elif kind == pcFile:
      if len(searchTerm) != 0 and searchTerm[0].key != "":
-        if contains(pathString, re(searchTerm[0].key,
-          if any(flags, proc(i: string): bool = return contains(i, "i")): {reIgnoreCase} else: {reStudy})): echo pathString
-        else: continue
+        if contains(pathString, re(searchTerm[0].key, {if any(flags, proc(i: string): bool = return contains(i, "s")): reStudy else: reIgnoreCase})):
+          echo pathString
+        else:
+          continue
      else:
         echo pathString
     else:
