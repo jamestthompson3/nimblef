@@ -2,15 +2,26 @@ import os, strutils, sequtils, parseopt, re
 
 type cliArg = tuple[kind: CmdLineKind, key: TaintedString, val: TaintedString]
 
-let searchTerm = filter(toSeq(getopt()), proc(i: cliArg): bool = return i.kind == cmdArgument)
+let currDir: string = getCurrentDir()
 
-let flags = map(filter(toSeq(getopt()), proc(i:cliArg): bool = return i.kind == cmdShortOption), proc(i: cliArg): TaintedString = i.key)
+let argsSeq: seq[cliArg] = toSeq(getopt())
+
+proc getKeys(targetGroup: CmdLineKind): seq[TaintedString] =
+  map(filter(argsSeq, proc(i:cliArg): bool = return i.kind == targetGroup), proc(i: cliArg): TaintedString = i.key)
+
+let searchTerm = filter(argsSeq, proc(i: cliArg): bool = return i.kind == cmdArgument)
+let flags = getKeys(cmdShortOption)
+let opts = getKeys(cmdLongOption)
+
+let searchTermIsNotEmpty = len(searchTerm) != 0 and searchTerm[0].key != ""
+let searchIsCaseSensitive = any(flags, proc(i: string): bool = return contains(i, "s"))
+let gitIgnoreIsNotUsed = any(opts, proc(i: string): bool = return contains(i, "no-ignore"))
+
 
 proc parseGitIgnore(openedFile: seq[string]): seq[string] =
   let parsedFiles = filter(openedFile, proc (i: string): bool =  return contains(i, "#") != true and i != "")
   return parsedFiles
 
-let currDir: string = getCurrentDir()
 proc listFiles(dir: string, ignored: seq[string]) =
   let parsed = parseGitIgnore(ignored)
   for kind, path in walkDir(dir):
@@ -19,8 +30,8 @@ proc listFiles(dir: string, ignored: seq[string]) =
     if any(parsed, proc (i: string): bool = return contains(pathString, i)) or contains(pathString, ".git"):
       continue
     elif kind == pcFile:
-     if len(searchTerm) != 0 and searchTerm[0].key != "":
-        if contains(pathString, re(searchTerm[0].key, {if any(flags, proc(i: string): bool = return contains(i, "s")): reStudy else: reIgnoreCase})):
+     if searchTermIsNotEmpty:
+        if contains(pathString, re(searchTerm[0].key, {if searchIsCaseSensitive: reStudy else: reIgnoreCase})):
           echo pathString
         else:
           continue
@@ -30,7 +41,7 @@ proc listFiles(dir: string, ignored: seq[string]) =
       listFiles(path, ignored)
 
 var f: File
-if open(f,".gitignore"):
+if open(f,".gitignore") and gitIgnoreIsNotUsed != true:
   let ignored: seq[string] = toSeq(lines(f))
   listFiles(currDir, ignored)
 else:
