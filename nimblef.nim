@@ -27,8 +27,14 @@ proc(i: string): bool = return contains(i, "no-ignore"))
 
 
 proc parseGitIgnore(openedFile: seq[string]): seq[string] =
-  let parsedFiles = filter(openedFile,
-    proc (i: string): bool =  return contains(i, "#") != true and i != "")
+  let parsedFiles = map(
+    filter(openedFile,
+      proc (i: string): bool =  return contains(i, "#") != true and i != ""),
+        proc (i: string): string =
+          var glob: string = i
+          glob.removePrefix({ '*' })
+          return glob
+        )
   return parsedFiles
 
 proc listFiles(dir: string, ignored: seq[string]) =
@@ -36,9 +42,11 @@ proc listFiles(dir: string, ignored: seq[string]) =
   for kind, path in walkDir(dir):
     var pathString: string = replace(path, currDir)
     pathString.removePrefix({ '/', '\\' })
-    if any(parsed, proc (i: string): bool =
+    if any(parsed,
+      proc (i: string): bool =
         return contains(pathString, i)) or contains(pathString, ".git"):
       continue
+
     elif kind == pcFile:
      if searchTermIsNotEmpty:
         if contains(pathString, re(searchTerm[0].key,
