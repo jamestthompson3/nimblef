@@ -2,9 +2,9 @@ import os, strutils, sequtils, parseopt, re
 
 type cliArg = tuple[kind: CmdLineKind, key: TaintedString, val: TaintedString]
 
-let currDir: string = getCurrentDir()
-
-let argsSeq: seq[cliArg] = toSeq(getopt())
+let
+  currDir: string = getCurrentDir()
+  argsSeq: seq[cliArg] = toSeq(getopt())
 
 proc getKeys(targetGroup: CmdLineKind): seq[TaintedString] =
   map(
@@ -15,27 +15,29 @@ proc getKeys(targetGroup: CmdLineKind): seq[TaintedString] =
 let searchTerm = filter(argsSeq,
   proc(i: cliArg): bool = return i.kind == cmdArgument)
 
-let flags = getKeys(cmdShortOption)
-let opts = getKeys(cmdLongOption)
+let
+  flags = getKeys(cmdShortOption)
+  opts = getKeys(cmdLongOption)
 
-let searchTermIsNotEmpty = len(searchTerm) != 0 and searchTerm[0].key != ""
-let searchIsCaseSensitive = any(flags,
-  proc(i: string): bool = return contains(i, "s"))
+let
+  searchTermIsNotEmpty = len(searchTerm) != 0 and searchTerm[0].key != ""
+  searchIsCaseSensitive = any(flags,
+    proc(i: string): bool = contains(i, "s"))
 
-let gitIgnoreIsNotUsed = any(opts,
-proc(i: string): bool = return contains(i, "no-ignore"))
+  gitIgnoreIsNotUsed = any(opts,
+    proc(i: string): bool = contains(i, "no-ignore"))
 
 
 proc parseGitIgnore(openedFile: seq[string]): seq[string] =
   let parsedFiles = map(
     filter(openedFile,
-      proc (i: string): bool =  return contains(i, "#") != true and i != ""),
+      proc (i: string): bool = return contains(i, "#") != true and i != ""),
         proc (i: string): string =
           var glob: string = i
           glob.removePrefix({ '*' })
           return glob
         )
-  return parsedFiles
+  parsedFiles
 
 proc listFiles(dir: string, ignored: seq[string]) =
   let parsed = parseGitIgnore(ignored)
