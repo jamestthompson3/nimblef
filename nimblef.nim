@@ -17,7 +17,7 @@ proc listFiles(dir: string, searchTerm: seq[cliArg], ignored: seq[string], caseS
     var pathString: string = replace(path, dir)
     pathString.removePrefix({ '/', '\\' })
 
-    if parsed.anyIt(it.contains(pathString) or pathString.contains(".git")):
+    if parsed.anyIt(it.contains(pathString)) or pathString.contains(".git"):
       continue
 
     if kind == pcFile:
@@ -38,8 +38,13 @@ proc main =
 
     caseSensitive = flags.anyIt(it.contains("s"))
     gitIgnore = not opts.anyIt(it.contains("no-ignore"))
-    ignored = if gitIgnore: toSeq(lines(".gitignore")) else: @[]
 
-  listFiles(currDir, searchTerm, ignored, caseSensitive)
+  var f: File
+  if open(f,".gitignore") and gitIgnore:
+    let ignored: seq[string] = toSeq(lines(f))
+    listFiles(currDir, searchTerm, ignored, caseSensitive)
+    close(f)
+  else:
+      listFiles(currDir, searchTerm, @[], caseSensitive)
 
 main()
