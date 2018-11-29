@@ -2,71 +2,44 @@ import os, strutils, sequtils, parseopt, re
 
 type cliArg = tuple[kind: CmdLineKind, key: TaintedString, val: TaintedString]
 
-let
-  currDir: string = getCurrentDir()
-  argsSeq: seq[cliArg] = toSeq(getopt())
+proc getKeys(argsSeq: seq[cliArg], targetGroup: CmdLineKind): seq[TaintedString] =
+  argsSeq.filterIt(it.kind == targetGroup).mapIt(it.key)
 
-proc getKeys(targetGroup: CmdLineKind): seq[TaintedString] =
-  map(
-    filter(argsSeq,
-      proc(i: cliArg): bool = return i.kind == targetGroup),
-        proc(i: cliArg): TaintedString = i.key)
+proc parseGitIgnore(content: seq[string]): seq[string] =
+  content.filterIt(not it.contains('#') and it.len > 0).map(proc(it: string): string =
+    result = it
+    result.removePrefix({'*'}))
 
-let searchTerm = filter(argsSeq,
-  proc(i: cliArg): bool = return i.kind == cmdArgument)
-
-let
-  flags = getKeys(cmdShortOption)
-  opts = getKeys(cmdLongOption)
-
-let
-  searchTermIsNotEmpty = len(searchTerm) != 0 and searchTerm[0].key != ""
-  searchIsCaseSensitive = any(flags,
-    proc(i: string): bool = contains(i, "s"))
-
-  gitIgnoreIsNotUsed = any(opts,
-    proc(i: string): bool = contains(i, "no-ignore"))
-
-
-proc parseGitIgnore(openedFile: seq[string]): seq[string] =
-  let parsedFiles = map(
-    filter(openedFile,
-      proc (i: string): bool = return contains(i, "#") != true and i != ""),
-        proc (i: string): string =
-          var glob: string = i
-          glob.removePrefix({ '*' })
-          return glob
-        )
-  parsedFiles
-
-proc listFiles(dir: string, ignored: seq[string]) =
+proc listFiles(dir: string, searchTerm: seq[cliArg], ignored: seq[string], caseSensitive: bool) =
   let parsed = parseGitIgnore(ignored)
+
   for kind, path in walkDir(dir):
-    var pathString: string = replace(path, currDir)
+    var pathString: string = replace(path, dir)
     pathString.removePrefix({ '/', '\\' })
-    if any(parsed,
-      proc (i: string): bool =
-        return contains(pathString, i)) or contains(pathString, ".git"):
+
+    if parsed.anyIt(it.contains(pathString) or pathString.contains(".git")):
       continue
 
-    elif kind == pcFile:
-     if searchTermIsNotEmpty:
-        if contains(pathString, re(searchTerm[0].key,
-          {if searchIsCaseSensitive: reStudy else: reIgnoreCase})):
-          echo pathString
-        else:
-          continue
-     else:
-        echo pathString
+    if kind == pcFile:
+      if len(searchTerm) == 0 or pathString.contains(re(searchTerm[0].key,
+         {if caseSensitive: reStudy else: reIgnoreCase})):
+         echo pathString
     else:
-      listFiles(path, ignored)
+      listFiles(path, searchTerm, ignored, caseSensitive)
 
-var f: File
+proc main =
+  let
+    currDir = getCurrentDir()
+    argsSeq = toSeq(getopt())
+    searchTerm = argsSeq.filterIt(it.kind == cmdArgument)
 
-if open(f,".gitignore") and gitIgnoreIsNotUsed != true:
-  let ignored: seq[string] = toSeq(lines(f))
-  listFiles(currDir, ignored)
-  close(f)
-else:
-  listFiles(currDir, newSeqWith(0, ""))
+    flags = argsSeq.getKeys(cmdShortOption)
+    opts = argsSeq.getKeys(cmdLongOption)
 
+    caseSensitive = flags.anyIt(it.contains("s"))
+    gitIgnore = not opts.anyIt(it.contains("no-ignore"))
+    ignored = if gitIgnore: toSeq(lines(".gitignore")) else: @[]
+
+  listFiles(currDir, searchTerm, ignored, caseSensitive)
+
+main()
