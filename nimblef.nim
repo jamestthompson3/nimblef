@@ -6,18 +6,22 @@ proc getKeys(argsSeq: seq[cliArg], targetGroup: CmdLineKind): seq[TaintedString]
   argsSeq.filterIt(it.kind == targetGroup).mapIt(it.key)
 
 proc parseGitIgnore(content: seq[string]): seq[string] =
-  content.filterIt(not it.contains('#') and it.len > 0).map(proc(it: string): string =
-    result = it
-    result.removePrefix({'*'}))
+  content.filterIt(not it.contains('#') and it.len > 0).map(
+    proc(it: string): string =
+      result = it
+      result.removePrefix({'*'})
+      result.removeSuffix({ '/', '\\' })
+    )
+
+let currDir = getCurrentDir()
 
 proc listFiles(dir: string, searchTerm: seq[cliArg], ignored: seq[string], caseSensitive: bool) =
   let parsed = parseGitIgnore(ignored)
-
   for kind, path in walkDir(dir):
-    var pathString: string = replace(path, dir)
+    var pathString: string = replace(path, currDir)
     pathString.removePrefix({ '/', '\\' })
 
-    if parsed.anyIt(it.contains(pathString)) or pathString.contains(".git"):
+    if parsed.anyIt(contains(pathString, it)) or pathString.contains(".git"):
       continue
 
     if kind == pcFile:
@@ -29,7 +33,6 @@ proc listFiles(dir: string, searchTerm: seq[cliArg], ignored: seq[string], caseS
 
 proc main =
   let
-    currDir = getCurrentDir()
     argsSeq = toSeq(getopt())
     searchTerm = argsSeq.filterIt(it.kind == cmdArgument)
 
