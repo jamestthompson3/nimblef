@@ -1,4 +1,4 @@
-import os, strutils, sequtils, parseopt, re
+import os, strutils, sequtils, parseopt, re, glob
 
 type cliArg = tuple[kind: CmdLineKind, key: TaintedString, val: TaintedString]
 
@@ -13,10 +13,27 @@ proc parseGitIgnore(content: seq[string]): seq[string] =
       result.removeSuffix({ '/', '\\' })
     )
 
+proc openGitIgnore(gitIgnore: bool): seq[string] =
+  var f: File
+  if open(f,".gitignore") and gitIgnore:
+    let ignored = toSeq(lines(f))
+    let parsed = parseGitIgnore(ignored)
+    result = parsed
+  else:
+    for kind, path in walkDir("../"):
+      if path.contains(".gitignore") and open(f, path):
+        let ignored = toSeq(lines(f))
+        let parsed = parseGitIgnore(ignored)
+        result = parsed
+      else:
+        result = @[]
+
+
 let currDir = getCurrentDir()
 
-proc listFiles(dir: string, searchTerm: seq[cliArg], ignored: seq[string], caseSensitive: bool) =
-  let parsed = parseGitIgnore(ignored)
+proc listFiles(dir: string, searchTerm: seq[cliArg],
+  caseSensitive: bool, parsed: seq[string]) =
+
   for kind, path in walkDir(dir):
     var pathString: string = replace(path, currDir)
     pathString.removePrefix({ '/', '\\' })
@@ -29,7 +46,7 @@ proc listFiles(dir: string, searchTerm: seq[cliArg], ignored: seq[string], caseS
          {if caseSensitive: reStudy else: reIgnoreCase})):
          echo pathString
     else:
-      listFiles(path, searchTerm, ignored, caseSensitive)
+      listFiles(path, searchTerm, caseSensitive, parsed)
 
 proc main =
   let
@@ -41,13 +58,8 @@ proc main =
 
     caseSensitive = flags.anyIt(it.contains("s"))
     gitIgnore = not opts.anyIt(it.contains("no-ignore"))
+    parsed = openGitIgnore(gitIgnore)
 
-  var f: File
-  if open(f,".gitignore") and gitIgnore:
-    let ignored: seq[string] = toSeq(lines(f))
-    listFiles(currDir, searchTerm, ignored, caseSensitive)
-    close(f)
-  else:
-      listFiles(currDir, searchTerm, @[], caseSensitive)
+  listFiles(currDir, searchTerm, caseSensitive, parsed)
 
 main()
