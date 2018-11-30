@@ -14,45 +14,47 @@ proc parseGitIgnore(content: seq[string]): seq[string] =
     )
 
 proc openGitIgnore(gitIgnore: bool): seq[string] =
+  let alwaysIgnored: seq[string] = @["node_modules", "target"]
   var f: File
   if open(f,".gitignore") and gitIgnore:
     let ignored = toSeq(lines(f))
     let parsed = parseGitIgnore(ignored)
-    result = parsed
+    result = concat(parsed, alwaysIgnored)
   else:
     for kind, path in walkDir("../"):
       if path.contains(".gitignore") and open(f, path):
         let ignored = toSeq(lines(f))
         let parsed = parseGitIgnore(ignored)
-        result = parsed
+        result = concat(parsed, alwaysIgnored)
       else:
-        result = @[]
+        result = alwaysIgnored
 
 
-let currDir = getCurrentDir()
 
 proc listFiles(dir: string, searchTerm: seq[cliArg],
-  caseSensitive: bool, parsed: seq[string]) =
+  caseSensitive: bool, parsed: seq[string], rootDir: string) =
 
-  for kind, path in walkDir(dir):
-    var pathString: string = replace(path, currDir)
-    pathString.removePrefix({ '/', '\\' })
+  for path in walkDirRec(dir):
+    var pathString: string = replace(path, rootDir)
 
     if parsed.anyIt(contains(pathString, it)) or pathString.contains(".git"):
       continue
 
-    if kind == pcFile:
-      if len(searchTerm) == 0 or pathString.contains(re(searchTerm[0].key,
-         {if caseSensitive: reStudy else: reIgnoreCase})):
-         echo pathString
-    else:
-      listFiles(path, searchTerm, caseSensitive, parsed)
+    pathString.removePrefix({ '/', '\\' })
+    if len(searchTerm) == 0 or pathString.contains(re(searchTerm[0].key,
+      {if caseSensitive: reStudy else: reIgnoreCase})):
+        echo pathString
+    # for path in walkDirRec(dir, yieldFilter = {pcDir})
+
+    # if kind == pcDir:
+    #   spawnX listFiles(path, searchTerm, caseSensitive, parsed, rootDir)
 
 proc main =
   let
     argsSeq = toSeq(getopt())
     searchTerm = argsSeq.filterIt(it.kind == cmdArgument)
 
+    currDir = getCurrentDir()
     flags = argsSeq.getKeys(cmdShortOption)
     opts = argsSeq.getKeys(cmdLongOption)
 
@@ -60,6 +62,6 @@ proc main =
     gitIgnore = not opts.anyIt(it.contains("no-ignore"))
     parsed = openGitIgnore(gitIgnore)
 
-  listFiles(currDir, searchTerm, caseSensitive, parsed)
+  listFiles(currDir, searchTerm, caseSensitive, parsed, currDir)
 
 main()
