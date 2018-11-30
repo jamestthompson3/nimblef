@@ -1,8 +1,6 @@
 import os, strutils, sequtils, parseopt, re, glob, threadpool
 
-{.experimental.}
-
-setMaxPoolSize 8
+setMaxPoolSize 16
 
 type cliArg = tuple[kind: CmdLineKind, key: TaintedString, val: TaintedString]
 
@@ -22,12 +20,14 @@ proc openGitIgnore(gitIgnore: bool): seq[string] =
   if open(f,".gitignore") and gitIgnore:
     let ignored = toSeq(lines(f))
     let parsed = parseGitIgnore(ignored)
+    close(f)
     result = parsed
   else:
     for kind, path in walkDir("../"):
       if path.contains(".gitignore") and open(f, path):
         let ignored = toSeq(lines(f))
         let parsed = parseGitIgnore(ignored)
+        close(f)
         result = parsed
       else:
         result = @[]
@@ -37,17 +37,17 @@ proc listFiles(dir: string, searchTerm: seq[cliArg],
 
   for kind, path in walkDir(dir):
     var pathString: string = replace(path, rootDir)
-    pathString.removePrefix({ '/', '\\' })
 
     if parsed.anyIt(contains(pathString, it)) or pathString.contains(".git"):
       continue
 
-    if kind == pcFile:
-      if len(searchTerm) == 0 or pathString.contains(re(searchTerm[0].key,
-         {if caseSensitive: reStudy else: reIgnoreCase})):
-         echo pathString
-    else:
+    if kind == pcDir:
       spawnX listFiles(path, searchTerm, caseSensitive, parsed, rootDir)
+
+    pathString.removePrefix({ '/', '\\' })
+    if len(searchTerm) == 0 or pathString.contains(re(searchTerm[0].key,
+      {if caseSensitive: reStudy else: reIgnoreCase})):
+        echo pathString
 
 proc main =
   let
