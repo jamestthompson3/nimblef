@@ -37,10 +37,10 @@ proc listFiles(dir: string, searchTerm: seq[cliArg],
   for path in walkDirRec(dir):
     var pathString: string = replace(path, rootDir)
 
-    if parsed.anyIt(contains(pathString, it)) or pathString.contains(".git"):
+    pathString.removePrefix({ '/', '\\' })
+    if parsed.anyIt(contains(pathString, it)) or pathString.contains(".git") or startsWith(pathString, "."):
       continue
 
-    pathString.removePrefix({ '/', '\\' })
     if len(searchTerm) == 0 or pathString.contains(re(searchTerm[0].key,
       {if caseSensitive: reStudy else: reIgnoreCase})):
         echo pathString
