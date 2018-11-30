@@ -1,4 +1,8 @@
-import os, strutils, sequtils, parseopt, re, glob
+import os, strutils, sequtils, parseopt, re, glob, threadpool
+
+{.experimental.}
+
+setMaxPoolSize 8
 
 type cliArg = tuple[kind: CmdLineKind, key: TaintedString, val: TaintedString]
 
@@ -28,14 +32,11 @@ proc openGitIgnore(gitIgnore: bool): seq[string] =
       else:
         result = @[]
 
-
-let currDir = getCurrentDir()
-
 proc listFiles(dir: string, searchTerm: seq[cliArg],
-  caseSensitive: bool, parsed: seq[string]) =
+  caseSensitive: bool, parsed: seq[string], rootDir: string) {.thread.} =
 
   for kind, path in walkDir(dir):
-    var pathString: string = replace(path, currDir)
+    var pathString: string = replace(path, rootDir)
     pathString.removePrefix({ '/', '\\' })
 
     if parsed.anyIt(contains(pathString, it)) or pathString.contains(".git"):
@@ -46,13 +47,15 @@ proc listFiles(dir: string, searchTerm: seq[cliArg],
          {if caseSensitive: reStudy else: reIgnoreCase})):
          echo pathString
     else:
-      listFiles(path, searchTerm, caseSensitive, parsed)
+      spawnX listFiles(path, searchTerm, caseSensitive, parsed, rootDir)
 
 proc main =
   let
     argsSeq = toSeq(getopt())
     searchTerm = argsSeq.filterIt(it.kind == cmdArgument)
 
+    currDir = getCurrentDir()
+    rootDir = currDir
     flags = argsSeq.getKeys(cmdShortOption)
     opts = argsSeq.getKeys(cmdLongOption)
 
@@ -60,6 +63,6 @@ proc main =
     gitIgnore = not opts.anyIt(it.contains("no-ignore"))
     parsed = openGitIgnore(gitIgnore)
 
-  listFiles(currDir, searchTerm, caseSensitive, parsed)
+  listFiles(currDir, searchTerm, caseSensitive, parsed, rootDir)
 
 main()
