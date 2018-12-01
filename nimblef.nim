@@ -1,4 +1,4 @@
-import os, strutils, sequtils, parseopt, re, glob
+import os, strutils, sequtils, parseopt, re
 
 type cliArg = tuple[kind: CmdLineKind, key: TaintedString, val: TaintedString]
 
@@ -13,23 +13,26 @@ proc parseGitIgnore(content: seq[string]): seq[string] =
       result.removeSuffix({ '/', '\\' })
     )
 
-proc openGitIgnore(gitIgnore: bool): seq[string] =
-  let alwaysIgnored: seq[string] = @["node_modules", "target"]
-  var f: File
-  if open(f,".gitignore") and gitIgnore:
-    let ignored = toSeq(lines(f))
+proc concatIgnored(ignored: seq[string],
+  alwaysIgnored: seq[string]): seq[string] =
     let parsed = parseGitIgnore(ignored)
     result = concat(parsed, alwaysIgnored)
+
+proc buildIgnored(gitIgnore: bool): seq[string] =
+  let alwaysIgnored: seq[string] = @[
+    "node_modules", "target",
+    "nimcache", "pycache",
+    "build"
+    ]
+  var f: File
+  if open(f,".gitignore") and gitIgnore:
+    result = concatIgnored(toSeq(lines(".gitignore")), alwaysIgnored)
   else:
     for kind, path in walkDir("../"):
       if path.contains(".gitignore") and open(f, path):
-        let ignored = toSeq(lines(f))
-        let parsed = parseGitIgnore(ignored)
-        result = concat(parsed, alwaysIgnored)
+        result = concatIgnored(toSeq(lines(path)), alwaysIgnored)
       else:
         result = alwaysIgnored
-
-
 
 proc listFiles(dir: string, searchTerm: seq[cliArg],
   caseSensitive: bool, parsed: seq[string], rootDir: string) =
@@ -60,7 +63,7 @@ proc main =
 
     caseSensitive = flags.anyIt(it.contains("s"))
     gitIgnore = not opts.anyIt(it.contains("no-ignore"))
-    parsed = openGitIgnore(gitIgnore)
+    parsed = buildIgnored(gitIgnore)
 
   listFiles(currDir, searchTerm, caseSensitive, parsed, currDir)
 
