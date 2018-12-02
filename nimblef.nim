@@ -32,7 +32,7 @@ proc buildIgnored(gitIgnore: bool): seq[string] =
       if path.contains(".gitignore") and open(f, path):
         result = concatIgnored(toSeq(lines(path)), alwaysIgnored)
       else:
-        result = alwaysIgnored
+        result = if not gitIgnore: @[] else: alwaysIgnored
 
 proc listFiles(dir: string, searchTerm: seq[cliArg],
   caseSensitive: bool, parsed: seq[string], rootDir: string) =
