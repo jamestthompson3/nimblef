@@ -9,17 +9,17 @@ const doc = """
 Usage: nf
        nf --help
        nf --no-ignore
-       nf --no-hidden
+       nf --hidden
        nf <searchterm>
        nf -s
        nf <searchterm> -s
-       nf <searchterm> --no-ignore
-       nf <searchterm> --no-hidden
+       nf <searchterm> --no-ignore -s
+       nf <searchterm> --hidden -s
 
 Options:
   --help          show this help message and exit
   --no-ignore     do not ignore files and folders specified in .gitignore
-  --no-hidden     do not ignore hidden files
+  --hidden     search hidden files
   -s              case sensitive search
   <searchterm>    search for a specific term
 
@@ -59,7 +59,7 @@ proc buildIgnored(noIgnore: bool): seq[string] =
         result = if noIgnore: @[] else: alwaysIgnored
 
 proc searchFiles(dir: string, searchTerm: string,
-  caseSensitive: bool, noHidden: bool, parsed: seq[string], rootDir: string,
+  caseSensitive: bool, hidden: bool, parsed: seq[string], rootDir: string,
   channel: ptr Channel[string]
   ) {.thread.} =
 
@@ -69,7 +69,7 @@ proc searchFiles(dir: string, searchTerm: string,
 
     var pathString: string = replace(path, rootDir)
     pathString.removePrefix({ '/', '\\' })
-    if not noHidden and startsWith(pathString, "."):
+    if not hidden and startsWith(pathString, "."):
       continue
 
     if kind == pcFile:
@@ -81,7 +81,7 @@ proc searchFiles(dir: string, searchTerm: string,
         pathString,
         searchTerm,
         caseSensitive,
-        noHidden,
+        hidden,
         parsed,
         rootDir,
         channel
@@ -100,7 +100,7 @@ proc main =
     currDir = getCurrentDir()
     caseSensitive = args["-s"]
     noIgnore = args["--no-ignore"]
-    noHidden = args["--no-hidden"]
+    hidden = args["--hidden"]
     parsed = buildIgnored(noIgnore)
 
   var channel: Channel[string]
@@ -111,7 +111,7 @@ proc main =
     currDir,
     searchTerm,
     caseSensitive,
-    noHidden,
+    hidden,
     parsed,
     currDir,
     addr(channel)
