@@ -1,17 +1,25 @@
-import os, strutils, sequtils, parseopt, re, docopt
+import os, strutils, sequtils, parseopt, re, docopt, threadpool
 
-let doc = """
+{.experimental.}
+
+# TODO:
+# Implement a searcher / buffer format
+# One thread searches and the other echoes to the buffer
+const doc = """
 Usage: nf
        nf --help
        nf --no-ignore
+       nf --no-hidden
        nf <searchterm>
        nf -s
        nf <searchterm> -s
        nf <searchterm> --no-ignore
+       nf <searchterm> --no-hidden
 
 Options:
   --help          show this help message and exit
   --no-ignore     do not ignore files and folders specified in .gitignore
+  --no-hidden     do not ignore hidden files
   -s              case sensitive search
   <searchterm>    search for a specific term
 
@@ -50,19 +58,39 @@ proc buildIgnored(noIgnore: bool): seq[string] =
       else:
         result = if noIgnore: @[] else: alwaysIgnored
 
-proc listFiles(dir: string, searchTerm: string,
-  caseSensitive: bool, parsed: seq[string], rootDir: string) =
+proc searchFiles(dir: string, searchTerm: string,
+  caseSensitive: bool, noHidden: bool, parsed: seq[string], rootDir: string,
+  channel: ptr Channel[string]
+  ) {.thread.} =
 
-  for path in walkDirRec(dir):
-    var pathString: string = replace(path, rootDir)
-
-    pathString.removePrefix({ '/', '\\' })
-    if parsed.anyIt(contains(pathString, it)) or pathString.contains(".git") or startsWith(pathString, "."):
+  for kind, path in walkDir(dir):
+    if parsed.anyIt(contains(path, it)) or path.contains(".git"):
       continue
 
-    if len(searchTerm) == 0 or pathString.contains(re(searchTerm,
-      {if caseSensitive: reStudy else: reIgnoreCase})):
-          echo pathString
+    var pathString: string = replace(path, rootDir)
+    pathString.removePrefix({ '/', '\\' })
+    if not noHidden and startsWith(pathString, "."):
+      continue
+
+    if kind == pcFile:
+      if len(searchTerm) == 0 or pathString.contains(re(searchTerm,
+        {if caseSensitive: reStudy else: reIgnoreCase})):
+        channel[].send(pathString)
+    else:
+      searchFiles(
+        pathString,
+        searchTerm,
+        caseSensitive,
+        noHidden,
+        parsed,
+        rootDir,
+        channel
+      )
+
+proc echoFiles(channel: ptr Channel[string]) {.thread.} =
+  while true:
+    let message = channel[].recv()
+    echo message
 
 proc main =
   let
@@ -72,8 +100,21 @@ proc main =
     currDir = getCurrentDir()
     caseSensitive = args["-s"]
     noIgnore = args["--no-ignore"]
+    noHidden = args["--no-hidden"]
     parsed = buildIgnored(noIgnore)
 
-  listFiles(currDir, searchTerm, caseSensitive, parsed, currDir)
+  var channel: Channel[string]
+
+  channel.open()
+  spawnX echoFiles(addr(channel))
+  searchFiles(
+    currDir,
+    searchTerm,
+    caseSensitive,
+    noHidden,
+    parsed,
+    currDir,
+    addr(channel)
+    )
 
 main()
