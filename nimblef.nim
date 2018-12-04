@@ -2,9 +2,6 @@ import os, strutils, sequtils, parseopt, re, docopt, threadpool
 
 {.experimental.}
 
-# TODO:
-# Implement a searcher / buffer format
-# One thread searches and the other echoes to the buffer
 const doc = """
 Usage: nf
        nf --help
@@ -76,6 +73,7 @@ proc searchFiles(dir: string, searchTerm: string,
       if len(searchTerm) == 0 or pathString.contains(re(searchTerm,
         {if caseSensitive: reStudy else: reIgnoreCase})):
         channel[].send(pathString)
+
     else:
       searchFiles(
         pathString,
