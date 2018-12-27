@@ -1,30 +1,27 @@
-import os, strutils, sequtils, parseopt, re, docopt, threadpool
+import os, strutils, sequtils, parseopt, re, docopt, terminal
 
 {.experimental.}
 
 const doc = """
-Usage: nf
-       nf --help
-       nf --no-ignore
-       nf --hidden
-       nf <searchterm>
-       nf -s
-       nf <searchterm> -s
-       nf <searchterm> --no-ignore -s
-       nf <searchterm> --hidden -s
+Usage: nf [<searchterm>] [options]
 
 Options:
   --help          show this help message and exit
   --no-ignore     do not ignore files and folders specified in .gitignore
-  --hidden     search hidden files
+  --hidden        search hidden files
   -s              case sensitive search
-  <searchterm>    search for a specific term
+  --colors        color search results
 
 Try: nf
      nf mydocument.txt
      nf --no-ignore
-     nf controller -s
+     nf controller -s --colors
 """
+
+template colorEcho*(s: string, fg: ForegroundColor) =
+  setForeGroundColor(fg, true)
+  s.writeStyled({})
+  resetAttributes()
 
 proc parseGitIgnore(content: seq[string]): seq[string] =
   content.filterIt(not it.contains('#') and it.len > 0).map(
@@ -33,6 +30,7 @@ proc parseGitIgnore(content: seq[string]): seq[string] =
       result.removePrefix({'*'})
       result.removeSuffix({ '/', '\\' })
     )
+
 
 proc concatIgnored(ignored: seq[string],
   alwaysIgnored: seq[string]): seq[string] =
@@ -55,9 +53,20 @@ proc buildIgnored(noIgnore: bool): seq[string] =
       else:
         result = if noIgnore: @[] else: alwaysIgnored
 
+proc echoFiles(msg: string, colors: bool = false) {.thread.} =
+    if msg != "":
+      if colors:
+        for i in split(msg, re"\/|\\"):
+          if match(i, re"[a-zA-Z]*\.[a-zA-Z]+"):
+            colorEcho(replace(msg, i), fgBlue)
+            colorEcho(i, fgWhite)
+            echo ""
+      else:
+        echo msg
+
 proc searchFiles(dir: string, searchTerm: string,
-  caseSensitive: bool, hidden: bool, parsed: seq[string], rootDir: string,
-  channel: ptr Channel[string]
+  caseSensitive: bool, hidden: bool, parsed: seq[string],
+  rootDir: string, colors: bool
   ) {.thread.} =
 
   for kind, path in walkDir(dir):
@@ -72,7 +81,7 @@ proc searchFiles(dir: string, searchTerm: string,
     if kind == pcFile:
       if len(searchTerm) == 0 or pathString.contains(re(searchTerm,
         {if caseSensitive: reStudy else: reIgnoreCase})):
-        channel[].send(pathString)
+        echoFiles(pathString, colors)
 
     else:
       searchFiles(
@@ -82,13 +91,10 @@ proc searchFiles(dir: string, searchTerm: string,
         hidden,
         parsed,
         rootDir,
-        channel
+        colors
       )
 
-proc echoFiles(channel: ptr Channel[string]) {.thread.} =
-  while true:
-    let message = channel[].recv()
-    echo message
+
 
 proc main =
   let
@@ -99,12 +105,9 @@ proc main =
     caseSensitive = args["-s"]
     noIgnore = args["--no-ignore"]
     hidden = args["--hidden"]
+    colors = args["--colors"]
     parsed = buildIgnored(noIgnore)
 
-  var channel: Channel[string]
-
-  channel.open()
-  spawnX echoFiles(addr(channel))
   searchFiles(
     currDir,
     searchTerm,
@@ -112,7 +115,7 @@ proc main =
     hidden,
     parsed,
     currDir,
-    addr(channel)
+    colors
     )
 
 main()
