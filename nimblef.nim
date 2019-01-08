@@ -1,4 +1,4 @@
-import os, strutils, sequtils, parseopt, re, docopt, terminal
+import os, strutils, sequtils, parseopt, re, docopt, terminal, threadpool
 
 {.experimental.}
 
@@ -53,8 +53,10 @@ proc buildIgnored(noIgnore: bool): seq[string] =
       else:
         result = if noIgnore: @[] else: alwaysIgnored
 
-proc echoFiles(msg: string, colors: bool = false) {.thread.} =
-    if msg != "":
+proc echoFiles(channel: ptr Channel[string], colors: bool = false) {.thread.} =
+  while true:
+    let (dataAvailable, msg ) = channel[].tryRecv()
+    if dataAvailable and msg != "":
       if colors:
         for i in split(msg, re"\/|\\"):
           if match(i, re"[a-zA-Z]*\.[a-zA-Z]+"):
@@ -66,7 +68,7 @@ proc echoFiles(msg: string, colors: bool = false) {.thread.} =
 
 proc searchFiles(dir: string, searchTerm: string,
   caseSensitive: bool, hidden: bool, parsed: seq[string],
-  rootDir: string, colors: bool
+  rootDir: string, channel: ptr Channel[string]
   ) {.thread.} =
 
   for kind, path in walkDir(dir):
@@ -81,7 +83,7 @@ proc searchFiles(dir: string, searchTerm: string,
     if kind == pcFile:
       if len(searchTerm) == 0 or pathString.contains(re(searchTerm,
         {if caseSensitive: reStudy else: reIgnoreCase})):
-        echoFiles(pathString, colors)
+          channel[].send(pathString)
 
     else:
       searchFiles(
@@ -91,8 +93,9 @@ proc searchFiles(dir: string, searchTerm: string,
         hidden,
         parsed,
         rootDir,
-        colors
-      )
+        channel
+        )
+
 
 
 
@@ -108,6 +111,11 @@ proc main =
     colors = args["--colors"]
     parsed = buildIgnored(noIgnore)
 
+  var channel: Channel[string]
+
+  channel.open()
+
+  spawn echoFiles(addr(channel), colors)
   searchFiles(
     currDir,
     searchTerm,
@@ -115,7 +123,7 @@ proc main =
     hidden,
     parsed,
     currDir,
-    colors
+    addr(channel)
     )
 
 main()
