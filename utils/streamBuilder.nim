@@ -1,4 +1,4 @@
-import terminal, strutils, re, os, queues, coro, times
+import terminal, strutils, re, os, queues, times
 
 template colorEcho*(s: string, fg: ForegroundColor) =
   setForeGroundColor(fg, true)
@@ -26,14 +26,6 @@ proc buildStream*(dir: string, colors: bool, searchTerm: string,
   var fileQueue = initQueue[string]()
   var mode: StreamStatus = Buffering
   var time = cpuTime()
-  #coro1 = coro.start(
-  #  proc() =
-  #    while fileQueue.len > 0:
-  #      if colors:
-  #        echoColor(fileQueue.pop())
-  #      else:
-  #        echo fileQueue.pop()
-  #  )
 
   proc echoFiles(msg: string) =
     if mode == Buffering:
@@ -47,12 +39,11 @@ proc buildStream*(dir: string, colors: bool, searchTerm: string,
       else:
         fileQueue.add(msg)
     else:
-      while fileQueue.len > 0:
-        if colors:
-          echoColor(fileQueue.pop())
-        else:
-          echo fileQueue.pop()
-    mode = Buffering
+      if colors:
+        echoColor(msg)
+      else:
+        echo msg
+      mode = Buffering
 
   proc searchFiles(dir: string, searchTerm: string,
     caseSensitive: bool, hidden: bool, parsed: seq[string],
