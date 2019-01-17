@@ -1,9 +1,16 @@
-import terminal, strutils, re, os, queues, coro
+import terminal, strutils, re, os, queues, coro, times
 
 template colorEcho*(s: string, fg: ForegroundColor) =
   setForeGroundColor(fg, true)
   s.writeStyled({})
   resetAttributes()
+
+type StreamStatus = enum
+  Streaming
+  Buffering
+
+const MAX_BUFFER_SIZE = 256
+const MAX_TIMEOUT = 150
 
 proc echoColor(msg: string) =
   for i in split(msg, re"\/|\\"):
@@ -12,27 +19,45 @@ proc echoColor(msg: string) =
       colorEcho(i, fgWhite)
       echo ""
 
-# proc echoFiles(fileQueue: Queue[string], colors: bool = false) {.thread.} =
- # while fileQueue.len > 0:
- #   echo fileQueue.pop()
- # for message in items(fileQueue):
- #   if message != "":
- #     if colors:
- #       echoColor(pop(fileQueue))
- #     else:
- #       echo pop(fileQueue)
-
 proc buildStream*(dir: string, colors: bool, searchTerm: string,
   caseSensitive: bool, hidden: bool, parsed: seq[string],
   rootDir: string
   ) =
-  var coro1: CoroutineRef
   var fileQueue = initQueue[string]()
+  var mode: StreamStatus = Buffering
+  var time = cpuTime()
+  #coro1 = coro.start(
+  #  proc() =
+  #    while fileQueue.len > 0:
+  #      if colors:
+  #        echoColor(fileQueue.pop())
+  #      else:
+  #        echo fileQueue.pop()
+  #  )
+
+  proc echoFiles(msg: string) =
+    if mode == Buffering:
+      if fileQueue.len > MAX_BUFFER_SIZE or msg == "flush" or (cpuTime() - time) > MAX_TIMEOUT / 1000:
+        while fileQueue.len > 0:
+          mode = Streaming
+          if colors:
+            echoColor(fileQueue.pop())
+          else:
+            echo fileQueue.pop()
+      else:
+        fileQueue.add(msg)
+    else:
+      while fileQueue.len > 0:
+        if colors:
+          echoColor(fileQueue.pop())
+        else:
+          echo fileQueue.pop()
+    mode = Buffering
 
   proc searchFiles(dir: string, searchTerm: string,
     caseSensitive: bool, hidden: bool, parsed: seq[string],
     rootDir: string
-    ) {.thread.} =
+    ) =
 
     for kind, path in walkDir(dir):
       if parsed.anyIt(contains(path, it)) or path.contains(".git"):
@@ -46,17 +71,10 @@ proc buildStream*(dir: string, colors: bool, searchTerm: string,
       if kind == pcFile:
         if len(searchTerm) == 0 or pathString.contains(re(searchTerm,
           {if caseSensitive: reStudy else: reIgnoreCase})):
-            fileQueue.add(pathString)
+          echoFiles(pathString)
+
 
       else:
-        coro.wait(coro.start(
-          proc() =
-            while fileQueue.len > 0:
-              if colors:
-                echoColor(fileQueue.pop())
-              else:
-                echo fileQueue.pop()
-          ))
         searchFiles(
           pathString,
           searchTerm,
@@ -66,13 +84,13 @@ proc buildStream*(dir: string, colors: bool, searchTerm: string,
           rootDir
           )
 
-  coro.start(proc() = searchFiles(
+  searchFiles(
     dir,
     searchTerm,
     caseSensitive,
     hidden,
     parsed,
     rootDir,
-    ))
-  coro.run()
+    )
+  echoFiles("flush")
 

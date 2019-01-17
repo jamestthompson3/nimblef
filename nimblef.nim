@@ -1,9 +1,7 @@
 import os, strutils, sequtils, parseopt, re
-import docopt, threadpool, locks, osproc
+import docopt
 
 include utils/argsBuilder, utils/streamBuilder
-
-{.experimental.}
 
 const doc = """
 Usage: nf [<searchterm>] [options]
