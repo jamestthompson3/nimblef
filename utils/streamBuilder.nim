@@ -28,10 +28,9 @@ proc buildStream*(dir: string, colors: bool, searchTerm: string,
   var time = cpuTime()
 
   proc echoFiles(msg: string) =
-    echo "=======", mode, "========"
+    # echo "=======", mode, "========"
     if mode == Buffering:
       if fileQueue.len > MAX_BUFFER_SIZE or msg == "flush":
-       # or (cpuTime() - time) > MAX_TIMEOUT / 1000:
         while fileQueue.len > 0:
           mode = Streaming
           if colors:
@@ -84,7 +83,6 @@ proc buildStream*(dir: string, colors: bool, searchTerm: string,
     parsed,
     rootDir,
     )
-  if (cpuTime() - time) > MAX_TIMEOUT / 1000:
-    echo "flushing queue"
-    echoFiles("flush")
+  # if (cpuTime() - time) > MAX_TIMEOUT / 1000:
+  echoFiles("flush")
 
