@@ -3,7 +3,6 @@ import terminal, strutils, re, os, queues, times, sequtils
 template colorEcho*(s: string, fg: ForegroundColor) =
   setForeGroundColor(fg, true)
   s.writeStyled({})
-  resetAttributes()
 
 type StreamStatus = enum
   Streaming
@@ -13,11 +12,16 @@ const MAX_BUFFER_SIZE = 256
 const MAX_TIMEOUT = 150
 
 proc echoColor(msg: string) =
-  for i in split(msg, re"\/|\\"):
-    if match(i, re"[a-zA-Z]*\.[a-zA-Z]+"):
-      colorEcho(replace(msg, i), fgBlue)
-      colorEcho(i, fgWhite)
+  let pathStrings = split(msg, re"\/|\\")
+  for index, pathStr in pathStrings:
+    if match(pathStr, re"[a-zA-Z]*\.[a-zA-Z]+"):
+      colorEcho(replace(msg, pathStr), fgBlue)
+      colorEcho(pathStr, fgWhite)
       echo ""
+    elif index == pathStrings.len:
+        colorEcho(replace(msg, pathStr), fgBlue)
+        colorEcho(pathStr, fgWhite)
+        echo ""
 
 proc buildStream*(dir: string, colors: bool, searchTerm: string,
   caseSensitive: bool, hidden: bool, parsed: seq[string],
@@ -83,6 +87,5 @@ proc buildStream*(dir: string, colors: bool, searchTerm: string,
     parsed,
     rootDir,
     )
-  # if (cpuTime() - time) > MAX_TIMEOUT / 1000:
   echoFiles("flush")
 
