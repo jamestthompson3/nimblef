@@ -1,6 +1,7 @@
-import os, strutils, sequtils, parseopt, re, docopt, terminal
+import os, strutils, sequtils, parseopt, re
+import docopt
 
-{.experimental.}
+include utils/argsBuilder, utils/streamBuilder
 
 const doc = """
 Usage: nf [<searchterm>] [options]
@@ -18,84 +19,6 @@ Try: nf
      nf controller -s --colors
 """
 
-template colorEcho*(s: string, fg: ForegroundColor) =
-  setForeGroundColor(fg, true)
-  s.writeStyled({})
-  resetAttributes()
-
-proc parseGitIgnore(content: seq[string]): seq[string] =
-  content.filterIt(not it.contains('#') and it.len > 0).map(
-    proc(it: string): string =
-      result = it
-      result.removePrefix({'*'})
-      result.removeSuffix({ '/', '\\' })
-    )
-
-
-proc concatIgnored(ignored: seq[string],
-  alwaysIgnored: seq[string]): seq[string] =
-    let parsed = parseGitIgnore(ignored)
-    result = concat(parsed, alwaysIgnored)
-
-proc buildIgnored(noIgnore: bool): seq[string] =
-  let alwaysIgnored: seq[string] = @[
-    "node_modules", "target",
-    "nimcache", "pycache",
-    "build"
-    ]
-  var f: File
-  if open(f,".gitignore") and not noIgnore:
-    result = concatIgnored(toSeq(lines(".gitignore")), alwaysIgnored)
-  else:
-    for kind, path in walkDir("../"):
-      if path.contains(".gitignore") and open(f, path):
-        result = concatIgnored(toSeq(lines(path)), alwaysIgnored)
-      else:
-        result = if noIgnore: @[] else: alwaysIgnored
-
-proc echoFiles(msg: string, colors: bool = false) {.thread.} =
-    if msg != "":
-      if colors:
-        for i in split(msg, re"\/|\\"):
-          if match(i, re"[a-zA-Z]*\.[a-zA-Z]+"):
-            colorEcho(replace(msg, i), fgBlue)
-            colorEcho(i, fgWhite)
-            echo ""
-      else:
-        echo msg
-
-proc searchFiles(dir: string, searchTerm: string,
-  caseSensitive: bool, hidden: bool, parsed: seq[string],
-  rootDir: string, colors: bool
-  ) {.thread.} =
-
-  for kind, path in walkDir(dir):
-    if parsed.anyIt(contains(path, it)) or path.contains(".git"):
-      continue
-
-    var pathString: string = replace(path, rootDir)
-    pathString.removePrefix({ '/', '\\' })
-    if not hidden and startsWith(pathString, "."):
-      continue
-
-    if kind == pcFile:
-      if len(searchTerm) == 0 or pathString.contains(re(searchTerm,
-        {if caseSensitive: reStudy else: reIgnoreCase})):
-        echoFiles(pathString, colors)
-
-    else:
-      searchFiles(
-        pathString,
-        searchTerm,
-        caseSensitive,
-        hidden,
-        parsed,
-        rootDir,
-        colors
-      )
-
-
-
 proc main =
   let
     argsSeq = toSeq(getopt())
@@ -108,14 +31,13 @@ proc main =
     colors = args["--colors"]
     parsed = buildIgnored(noIgnore)
 
-  searchFiles(
-    currDir,
+  buildStream(currDir,
+    colors,
     searchTerm,
     caseSensitive,
     hidden,
     parsed,
-    currDir,
-    colors
-    )
+    currDir
+  )
 
 main()
