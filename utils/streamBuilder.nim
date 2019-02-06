@@ -9,7 +9,6 @@ type StreamStatus = enum
   Buffering
 
 const MAX_BUFFER_SIZE = 256
-const MAX_TIMEOUT = 150
 
 proc echoColor(msg: string) =
   let pathStrings = split(msg, re"\/|\\")
@@ -32,7 +31,6 @@ proc buildStream*(dir: string, colors: bool, searchTerm: string,
   var time = cpuTime()
 
   proc echoFiles(msg: string) =
-    # echo "=======", mode, "========"
     if mode == Buffering:
       if fileQueue.len > MAX_BUFFER_SIZE or msg == "flush":
         while fileQueue.len > 0:
